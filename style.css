@@ -13,6 +13,28 @@ nav { display: flex; flex-wrap: wrap; gap: .4rem; }
   padding: .5rem 1rem; border-radius: 6px; cursor: pointer; font-size: .95rem;
 }
 .tab-btn.active { background: #fff; color: #14532d; font-weight: 600; }
+.tab-btn .ikon { margin-right: .35rem; }
+
+/* På mobil bliver navigationen en app-agtig bundbjælke med ikoner */
+@media (max-width: 700px) {
+  header { padding: .8rem 1rem .8rem; }
+  header h1 { margin-bottom: 0; font-size: 1.2rem; }
+  nav {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 20;
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
+    background: #fff; border-top: 1px solid #e5eaf0;
+    padding: .35rem 0 calc(.35rem + env(safe-area-inset-bottom));
+    box-shadow: 0 -2px 8px rgba(0,0,0,.06);
+  }
+  .tab-btn {
+    display: flex; flex-direction: column; align-items: center; gap: .1rem;
+    background: none; color: #5b6b7b; font-size: .68rem; padding: .2rem 0; border-radius: 0;
+  }
+  .tab-btn.active { background: none; color: #14532d; font-weight: 700; }
+  .tab-btn .ikon { font-size: 1.35rem; margin: 0; }
+  main { margin-bottom: 5.5rem; }
+  footer { padding-bottom: 6rem; }
+}
 
 main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1rem; }
 .tab { display: none; }
@@ -25,6 +47,25 @@ main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1rem; }
 
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
 @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
+
+/* Kategorioverblik med søjler */
+.kat-liste { background: #fff; border-radius: 10px; padding: .8rem 1rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.kat-raekke { display: grid; grid-template-columns: 9rem 1fr auto; gap: .6rem; align-items: center; margin: .45rem 0; font-size: .9rem; }
+.kat-navn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kat-bar { background: #eef2f6; border-radius: 5px; height: 12px; overflow: hidden; }
+.kat-bar div { background: #16a34a; height: 100%; border-radius: 5px; }
+.kat-beloeb { font-weight: 600; white-space: nowrap; }
+
+/* Seneste posteringer */
+.seneste-liste { background: #fff; border-radius: 10px; padding: .4rem 1rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.seneste-raekke { display: flex; justify-content: space-between; gap: 1rem; padding: .45rem 0; border-bottom: 1px solid #eef2f6; font-size: .9rem; }
+.seneste-raekke:last-child { border-bottom: none; }
+.seneste-raekke .positiv { color: #15803d; font-weight: 600; }
+.seneste-raekke .negativ { color: #b91c1c; font-weight: 600; }
+
+/* Månedsvælger over posteringstabellen */
+.maaned-vaelger { display: flex; align-items: center; gap: .8rem; margin: .5rem 0 .8rem; flex-wrap: wrap; }
+.maaned-vaelger select { width: auto; }
 
 form label { display: block; margin: .6rem 0; font-size: .95rem; }
 input[type=text], input[type=number], input[type=date], select {

@@ -14,6 +14,32 @@ function gem() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 function kr(n) { return Math.round(n).toLocaleString("da-DK") + " kr."; }
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
+const KAT_EMOJI = {
+  "Løn": "💰", "Bolig": "🏠", "Mad": "🍎", "Transport": "🚗",
+  "Fritid": "🎉", "Tøj": "👕", "Abonnementer": "📺", "Rejse": "✈️", "Andet": "📦",
+};
+
+/* Automatisk kategorisering ud fra posteringsteksten (bruges ved CSV-import
+   og som forslag ved manuel indtastning) */
+const KATEGORI_REGLER = [
+  { kat: "Mad", ord: ["netto", "rema", "føtex", "fotex", "lidl", "aldi", "bilka", "coop", "brugsen", "kvickly", "meny", "spar ", "købmand", "7-eleven", "bager"] },
+  { kat: "Transport", ord: ["dsb", "rejsekort", "circle k", "q8", "ok benzin", "uno-x", "ingo", "shell", "parkering", "easypark", "apcoa", "fdm", "movia", "gomore", "letbane", "metro"] },
+  { kat: "Bolig", ord: ["husleje", "bolig", "ejendom", "ørsted", "andel energi", "norlys", "ewii", "vandværk", "varme", "forsikring", "fibernet", "yousee", "stofa", "hiper"] },
+  { kat: "Abonnementer", ord: ["netflix", "spotify", "hbo", "disney", "viaplay", "tv2 play", "youtube", "apple.com", "icloud", "google one", "telenor", "telia", "tdc", "cbb", "oister", "lebara", "abonnement"] },
+  { kat: "Fritid", ord: ["restaurant", "cafe", "café", "mcdonald", "burger", "pizza", "sushi", "grill", "biograf", "cinema", "kino", "fitness", "sats", "puregym", "loop", "bar ", "bodega"] },
+  { kat: "Tøj", ord: ["h&m", "zalando", "asos", "bestseller", "jack & jones", "only", "name it", "zara", "nike", "adidas", "intersport"] },
+  { kat: "Rejse", ord: ["ryanair", "norwegian", "sas ", "airbnb", "booking.com", "hotel", "camping", "færge", "molslinjen"] },
+  { kat: "Løn", ord: ["løn", "salary", "dagpenge", "su ", "feriepenge"] },
+];
+
+function gaetKategori(tekst) {
+  const t = (tekst || "").toLowerCase();
+  for (const regel of KATEGORI_REGLER) {
+    if (regel.ord.some(o => t.includes(o))) return regel.kat;
+  }
+  return "Andet";
+}
+
 /* ---------- Faner ---------- */
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -77,7 +103,49 @@ function renderOverblik() {
   document.getElementById("ov-ind").textContent = kr(ind);
   document.getElementById("ov-ud").textContent = kr(ud);
   document.getElementById("startsaldo").value = state.startsaldo;
+  renderKategorier();
+  renderSeneste();
   renderMaalListe(document.getElementById("ov-maal-liste"), false);
+}
+
+/* Søjler pr. kategori for denne måneds udgifter */
+function renderKategorier() {
+  const nu = new Date();
+  const sum = {};
+  state.posteringer.forEach(p => {
+    const d = new Date(p.dato);
+    if (p.type === "udgift" && d.getFullYear() === nu.getFullYear() && d.getMonth() === nu.getMonth()) {
+      sum[p.kategori] = (sum[p.kategori] || 0) + p.beloeb;
+    }
+  });
+  const div = document.getElementById("ov-kategorier");
+  const par = Object.entries(sum).sort((a, b) => b[1] - a[1]);
+  if (par.length === 0) {
+    div.innerHTML = "<p class='hint'>Ingen udgifter denne måned endnu.</p>";
+    return;
+  }
+  const maks = par[0][1];
+  div.innerHTML = par.map(([kat, beloeb]) => `
+    <div class="kat-raekke">
+      <span class="kat-navn">${KAT_EMOJI[kat] || "📦"} ${kat}</span>
+      <div class="kat-bar"><div style="width:${Math.round((beloeb / maks) * 100)}%"></div></div>
+      <span class="kat-beloeb">${kr(beloeb)}</span>
+    </div>`).join("");
+}
+
+/* De 5 seneste posteringer, kompakt */
+function renderSeneste() {
+  const div = document.getElementById("ov-seneste");
+  const seneste = [...state.posteringer].sort((a, b) => b.dato.localeCompare(a.dato)).slice(0, 5);
+  if (seneste.length === 0) {
+    div.innerHTML = "<p class='hint'>Ingen posteringer endnu – tilføj under “Ind & ud”.</p>";
+    return;
+  }
+  div.innerHTML = seneste.map(p => `
+    <div class="seneste-raekke">
+      <span>${KAT_EMOJI[p.kategori] || "📦"} ${p.tekst}</span>
+      <span class="${p.type === "indtaegt" ? "positiv" : "negativ"}">${p.type === "indtaegt" ? "+" : "−"}${kr(p.beloeb)}</span>
+    </div>`).join("");
 }
 
 document.getElementById("startsaldo").addEventListener("change", e => {
@@ -87,6 +155,32 @@ document.getElementById("startsaldo").addEventListener("change", e => {
 
 /* ---------- Posteringer ---------- */
 document.getElementById("p-dato").valueAsDate = new Date();
+
+// Foreslå kategori automatisk når man skriver teksten
+document.getElementById("p-tekst").addEventListener("blur", e => {
+  const gaet = gaetKategori(e.target.value);
+  if (gaet !== "Andet") document.getElementById("p-kategori").value = gaet;
+});
+
+let valgtMaaned = "alle";
+
+document.getElementById("p-maaned").addEventListener("change", e => {
+  valgtMaaned = e.target.value;
+  renderPosteringer();
+});
+
+function renderMaanedVaelger() {
+  const select = document.getElementById("p-maaned");
+  const maaneder = [...new Set(state.posteringer.map(p => p.dato.slice(0, 7)))].sort().reverse();
+  const navne = ["januar", "februar", "marts", "april", "maj", "juni", "juli", "august", "september", "oktober", "november", "december"];
+  select.innerHTML = `<option value="alle">Alle måneder</option>` +
+    maaneder.map(m => {
+      const [aar, md] = m.split("-");
+      return `<option value="${m}">${navne[Number(md) - 1]} ${aar}</option>`;
+    }).join("");
+  if (valgtMaaned !== "alle" && !maaneder.includes(valgtMaaned)) valgtMaaned = "alle";
+  select.value = valgtMaaned;
+}
 
 document.getElementById("post-form").addEventListener("submit", e => {
   e.preventDefault();
@@ -105,15 +199,19 @@ document.getElementById("post-form").addEventListener("submit", e => {
 });
 
 function renderPosteringer() {
+  renderMaanedVaelger();
   const tbody = document.querySelector("#post-tabel tbody");
   tbody.innerHTML = "";
-  [...state.posteringer]
-    .sort((a, b) => b.dato.localeCompare(a.dato))
-    .forEach(p => {
+  const viste = [...state.posteringer]
+    .filter(p => valgtMaaned === "alle" || p.dato.startsWith(valgtMaaned))
+    .sort((a, b) => b.dato.localeCompare(a.dato));
+  let ind = 0, ud = 0;
+  viste.forEach(p => {
+      if (p.type === "indtaegt") ind += p.beloeb; else ud += p.beloeb;
       const tr = document.createElement("tr");
       const fortegn = p.type === "indtaegt" ? "+" : "−";
-      tr.innerHTML = `<td>${p.dato}</td><td>${p.tekst}${p.fast ? " 🔁" : ""}</td>
-        <td>${p.kategori}</td>
+      tr.innerHTML = `<td>${p.dato.slice(8, 10)}/${p.dato.slice(5, 7)}</td>
+        <td>${KAT_EMOJI[p.kategori] || "📦"} ${p.tekst}${p.fast ? " 🔁" : ""}</td>
         <td class="${p.type === "indtaegt" ? "positiv" : "negativ"}">${fortegn}${kr(p.beloeb)}</td>
         <td><button title="Slet" data-id="${p.id}">✕</button></td>`;
       tr.querySelector("button").addEventListener("click", () => {
@@ -122,6 +220,8 @@ function renderPosteringer() {
       });
       tbody.appendChild(tr);
     });
+  document.getElementById("p-maaned-sum").textContent =
+    viste.length ? `Ind: ${kr(ind)} · Ud: ${kr(ud)} · Netto: ${kr(ind - ud)}` : "";
 }
 
 /* ---------- CSV-import fra bank ---------- */
@@ -146,7 +246,7 @@ document.getElementById("csv-fil").addEventListener("change", e => {
         id: uid(),
         type: beloeb >= 0 ? "indtaegt" : "udgift",
         tekst, beloeb: Math.abs(beloeb), dato,
-        kategori: "Andet", fast: false,
+        kategori: gaetKategori(tekst), fast: false,
       });
       importeret++;
     });

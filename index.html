@@ -15,11 +15,11 @@
 <header>
   <h1>💰 Davids Budget App</h1>
   <nav>
-    <button class="tab-btn active" data-tab="overblik">Overblik</button>
-    <button class="tab-btn" data-tab="posteringer">Indtægter &amp; udgifter</button>
-    <button class="tab-btn" data-tab="maal">Mål</button>
-    <button class="tab-btn" data-tab="koebtjek">Kan jeg købe?</button>
-    <button class="tab-btn" data-tab="rejse">Rejseestimat</button>
+    <button class="tab-btn active" data-tab="overblik"><span class="ikon">📊</span><span>Overblik</span></button>
+    <button class="tab-btn" data-tab="posteringer"><span class="ikon">💳</span><span>Ind &amp; ud</span></button>
+    <button class="tab-btn" data-tab="maal"><span class="ikon">🎯</span><span>Mål</span></button>
+    <button class="tab-btn" data-tab="koebtjek"><span class="ikon">🛒</span><span>Køb?</span></button>
+    <button class="tab-btn" data-tab="rejse"><span class="ikon">✈️</span><span>Rejse</span></button>
   </nav>
 </header>
 
@@ -40,6 +40,16 @@
       <h3>Denne måned</h3>
       <p>Indtægter: <strong id="ov-ind">0 kr.</strong></p>
       <p>Udgifter: <strong id="ov-ud">0 kr.</strong></p>
+    </div>
+  </div>
+  <div class="split">
+    <div>
+      <h3>Udgifter denne måned – pr. kategori</h3>
+      <div id="ov-kategorier" class="kat-liste"></div>
+    </div>
+    <div>
+      <h3>Seneste posteringer</h3>
+      <div id="ov-seneste" class="seneste-liste"></div>
     </div>
   </div>
   <h3>Mine mål</h3>
@@ -79,8 +89,12 @@
     </div>
     <div>
       <h3>Posteringer</h3>
+      <div class="maaned-vaelger">
+        <select id="p-maaned"></select>
+        <span id="p-maaned-sum" class="hint"></span>
+      </div>
       <table id="post-tabel">
-        <thead><tr><th>Dato</th><th>Tekst</th><th>Kategori</th><th>Beløb</th><th></th></tr></thead>
+        <thead><tr><th>Dato</th><th>Tekst</th><th>Beløb</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
