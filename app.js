@@ -9,6 +9,9 @@ let state = JSON.parse(localStorage.getItem(LS_KEY) || "null") || {
   posteringer: [],   // {id, type, tekst, beloeb, dato, kategori, fast}
   maal: [],          // {id, navn, beloeb, dato, prio}
 };
+if (!state.startsaldo) state.startsaldo = 0;
+if (!Array.isArray(state.posteringer)) state.posteringer = [];
+if (!Array.isArray(state.maal)) state.maal = [];
 if (!state.bank) state.bank = { server: "", token: "", sidst: "", konti: [] };
 if (!state.bank.konti) state.bank.konti = [];
 
@@ -682,8 +685,71 @@ function botSvar(spgRaa) {
     • “Hvad må ferien koste pr. dag?”`;
 }
 
-function stilSpoergsmaal(tekst) {
+/* Samtalehistorik til AI'en (kun i hukommelsen) */
+const chatHistorik = [];
+
+/* Nøgletal som AI'en får med, så den kan regne på Davids egne tal */
+function bygKontekst() {
+  const { ind, ud } = denneMaaned();
+  const kategorier = {};
+  const nu = new Date();
+  state.posteringer.forEach(p => {
+    const d = new Date(p.dato);
+    if (p.type === "udgift" && d.getFullYear() === nu.getFullYear() && d.getMonth() === nu.getMonth()) {
+      kategorier[p.kategori] = (kategorier[p.kategori] || 0) + p.beloeb;
+    }
+  });
+  return {
+    dato_i_dag: new Date().toISOString().slice(0, 10),
+    opsparing_kr: Math.round(opsparing()),
+    maanedligt_overskud_kr: Math.round(maanedligtOverskud()),
+    denne_maaned: { indtaegter_kr: Math.round(ind), udgifter_kr: Math.round(ud), udgifter_pr_kategori: kategorier },
+    maal: state.maal.map(m => ({ navn: m.navn, beloeb_kr: m.beloeb, senest: m.dato, prioritet: m.prio })),
+    rejseplan: {
+      budget_kr: Number(document.getElementById("r-budget").value) || null,
+      dage: Number(document.getElementById("r-dage").value) || null,
+      faste_udgifter_kr: fasteUdgifter.reduce((a, f) => a + f.beloeb, 0),
+    },
+  };
+}
+
+/* AI-svar formateres let: fed skrift og linjeskift */
+function formatAiSvar(t) {
+  return escHtml(t)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\n/g, "<br>");
+}
+
+async function stilSpoergsmaal(tekst) {
   chatBesked(escHtml(tekst), false);
+
+  // Prøv ægte AI via serveren, hvis den er sat op
+  if (bankOpsat()) {
+    const vindue = document.getElementById("chat-vindue");
+    const taenker = document.createElement("div");
+    taenker.className = "chat-besked bot";
+    taenker.textContent = "Tænker …";
+    vindue.appendChild(taenker);
+    vindue.scrollTop = vindue.scrollHeight;
+    try {
+      const res = await fetch(state.bank.server.replace(/\/$/, "") + "/spar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-App-Token": state.bank.token },
+        body: JSON.stringify({ besked: tekst, historik: chatHistorik, kontekst: bygKontekst() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.svar) {
+        taenker.innerHTML = formatAiSvar(data.svar);
+        chatHistorik.push({ role: "user", content: tekst }, { role: "assistant", content: data.svar });
+        if (chatHistorik.length > 20) chatHistorik.splice(0, chatHistorik.length - 20);
+        return;
+      }
+      taenker.remove(); // AI ikke sat op eller fejlede – fald tilbage til regne-botten
+    } catch {
+      taenker.remove();
+    }
+  }
+
   setTimeout(() => chatBesked(botSvar(tekst), true), 150);
 }
 

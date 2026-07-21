@@ -4,14 +4,17 @@
    Designet til gratis hosting på Deno Deploy (dash.deno.com).
 
    Miljøvariabler (sættes i Deno Deploy under Settings → Environment):
-     EB_APP_ID      – applikations-id fra Enable Banking Control Panel
-     EB_PRIVATE_KEY – den private RSA-nøgle (hele PEM-indholdet)
-     APP_TOKEN      – selvvalgt kodeord som appen skal sende med
+     EB_APP_ID         – applikations-id fra Enable Banking Control Panel
+     EB_PRIVATE_KEY    – den private RSA-nøgle (hele PEM-indholdet)
+     APP_TOKEN         – selvvalgt kodeord som appen skal sende med
+     ANTHROPIC_API_KEY – (valgfri) nøgle fra console.anthropic.com,
+                         aktiverer AI-udgaven af Spar-botten
    ============================================================ */
 
 const APP_ID = Deno.env.get("EB_APP_ID") ?? "";
 const PRIVATE_KEY_PEM = Deno.env.get("EB_PRIVATE_KEY") ?? "";
 const APP_TOKEN = Deno.env.get("APP_TOKEN") ?? "";
+const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 const APP_URL = Deno.env.get("APP_URL") ?? "https://draga28.github.io/Budget-app/";
 const API = "https://api.enablebanking.com";
 /* Serveren gemmer ingenting: forbundne konti opbevares i appen på
@@ -161,6 +164,54 @@ Deno.serve(async (req: Request) => {
         } while (continuationKey);
       }
       return svar({ posteringer: alle });
+    }
+
+    /* Spar-bot med ægte AI: appen sender spørgsmål + budgetoverblik,
+       serveren spørger Claude og returnerer svaret */
+    if (url.pathname === "/spar" && req.method === "POST") {
+      if (!tjekToken(req)) return svar({ fejl: "forkert token" }, 401);
+      if (!ANTHROPIC_API_KEY) {
+        return svar({ fejl: "AI er ikke sat op på serveren endnu" }, 501);
+      }
+      const { besked, historik, kontekst } = await req.json();
+      const system = `Du er Davids personlige budget-rådgiver i hans egen budget-app. Du taler dansk, er venlig og konkret, og regner altid på hans faktiske tal, som følger her (beløb i danske kroner):
+
+${JSON.stringify(kontekst, null, 2)}
+
+Retningslinjer:
+- Svar kort og handlingsorienteret; brug konkrete beløb og måneder frem for vage råd.
+- Når du vurderer et køb eller en plan, så vis regnestykket kort.
+- Vær ærlig, hvis noget ikke hænger sammen økonomisk, og foreslå så alternativer (vent X måneder, justér mål, find besparelser i største kategori).
+- Du kan ikke ændre noget i appen; henvis i stedet til fanerne (Mål, Køb?, Rejse) når det er relevant.
+- Ingen investeringsrådgivning; hold dig til privatøkonomisk planlægning.`;
+      const beskeder = [
+        ...(Array.isArray(historik) ? historik.slice(-10) : []),
+        { role: "user", content: String(besked ?? "") },
+      ];
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-opus-4-8",
+          max_tokens: 1024,
+          system,
+          messages: beskeder,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("Claude-fejl:", data);
+        return svar({ fejl: data?.error?.message ?? `Claude-fejl (${res.status})` }, 502);
+      }
+      const tekst = (data.content ?? [])
+        .filter((b: { type: string }) => b.type === "text")
+        .map((b: { text: string }) => b.text)
+        .join("\n");
+      return svar({ svar: tekst });
     }
 
     return svar({ fejl: "ukendt sti" }, 404);
