@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Davids Budget App</title>
+<meta name="theme-color" content="#14532d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>💰 Davids Budget App</h1>
+  <nav>
+    <button class="tab-btn active" data-tab="overblik">Overblik</button>
+    <button class="tab-btn" data-tab="posteringer">Indtægter &amp; udgifter</button>
+    <button class="tab-btn" data-tab="maal">Mål</button>
+    <button class="tab-btn" data-tab="koebtjek">Kan jeg købe?</button>
+    <button class="tab-btn" data-tab="rejse">Rejseestimat</button>
+  </nav>
+</header>
+
+<main>
+<!-- ===================== OVERBLIK ===================== -->
+<section id="overblik" class="tab active">
+  <div class="cards">
+    <div class="card">
+      <h3>Nuværende opsparing</h3>
+      <p class="big" id="ov-opsparing">0 kr.</p>
+      <label>Justér startsaldo: <input type="number" id="startsaldo" value="0"> kr.</label>
+    </div>
+    <div class="card">
+      <h3>Månedligt overskud (gns. sidste 3 mdr.)</h3>
+      <p class="big" id="ov-overskud">0 kr.</p>
+    </div>
+    <div class="card">
+      <h3>Denne måned</h3>
+      <p>Indtægter: <strong id="ov-ind">0 kr.</strong></p>
+      <p>Udgifter: <strong id="ov-ud">0 kr.</strong></p>
+    </div>
+  </div>
+  <h3>Mine mål</h3>
+  <div id="ov-maal-liste" class="goal-list"></div>
+</section>
+
+<!-- ===================== POSTERINGER ===================== -->
+<section id="posteringer" class="tab">
+  <div class="split">
+    <div>
+      <h3>Tilføj postering</h3>
+      <form id="post-form">
+        <label>Type
+          <select id="p-type">
+            <option value="indtaegt">Indtægt</option>
+            <option value="udgift">Udgift</option>
+          </select>
+        </label>
+        <label>Beskrivelse <input type="text" id="p-tekst" required placeholder="fx Løn, Husleje, Netto"></label>
+        <label>Beløb <input type="number" id="p-beloeb" required min="0" step="0.01"> kr.</label>
+        <label>Dato <input type="date" id="p-dato" required></label>
+        <label>Kategori
+          <select id="p-kategori">
+            <option>Løn</option><option>Bolig</option><option>Mad</option>
+            <option>Transport</option><option>Fritid</option><option>Tøj</option>
+            <option>Abonnementer</option><option>Rejse</option><option>Andet</option>
+          </select>
+        </label>
+        <label>Fast månedlig? <input type="checkbox" id="p-fast"> (gentages automatisk i beregninger)</label>
+        <button type="submit">Gem</button>
+      </form>
+
+      <h3>Import fra bank (CSV)</h3>
+      <p class="hint">Eksportér CSV fra din netbank og træk filen herind. Kolonner: dato; tekst; beløb (negativt = udgift). De fleste danske banker (Danske Bank, Nordea, Lunar m.fl.) kan eksportere CSV.</p>
+      <input type="file" id="csv-fil" accept=".csv">
+      <p id="csv-status"></p>
+    </div>
+    <div>
+      <h3>Posteringer</h3>
+      <table id="post-tabel">
+        <thead><tr><th>Dato</th><th>Tekst</th><th>Kategori</th><th>Beløb</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== MÅL ===================== -->
+<section id="maal" class="tab">
+  <div class="split">
+    <div>
+      <h3>Nyt mål</h3>
+      <form id="maal-form">
+        <label>Navn <input type="text" id="m-navn" required placeholder="fx Ferie i Spanien"></label>
+        <label>Beløb <input type="number" id="m-beloeb" required min="1"> kr.</label>
+        <label>Skal være klar senest <input type="date" id="m-dato" required></label>
+        <label>Prioritet
+          <select id="m-prio">
+            <option value="1">Høj – må ikke skubbes</option>
+            <option value="2">Mellem</option>
+            <option value="3">Lav – kan vente</option>
+          </select>
+        </label>
+        <button type="submit">Opret mål</button>
+      </form>
+    </div>
+    <div>
+      <h3>Mine mål</h3>
+      <div id="maal-liste" class="goal-list"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== KØB-TJEK ===================== -->
+<section id="koebtjek" class="tab">
+  <h3>Kan jeg købe det her – eller skal jeg vente?</h3>
+  <p class="hint">Appen tjekker om købet stadig lader dig nå dine mål til tiden, ud fra din opsparing og dit månedlige overskud.</p>
+  <form id="koeb-form">
+    <label>Hvad vil du købe? <input type="text" id="k-tekst" placeholder="fx Computer"></label>
+    <label>Pris <input type="number" id="k-pris" required min="1" value="10000"> kr.</label>
+    <button type="submit">Tjek købet</button>
+  </form>
+  <div id="koeb-resultat" class="result-box hidden"></div>
+</section>
+
+<!-- ===================== REJSEESTIMAT ===================== -->
+<section id="rejse" class="tab">
+  <h3>Rejseestimat – er budgettet realistisk?</h3>
+  <form id="rejse-form">
+    <div class="split">
+      <div>
+        <h4>Rammen</h4>
+        <label>Maks. budget for hele rejsen <input type="number" id="r-budget" value="20000"> kr.</label>
+        <label>Antal dage <input type="number" id="r-dage" value="37" min="1"></label>
+        <label>Antal personer <input type="number" id="r-personer" value="1" min="1"></label>
+
+        <h4>Faste udgifter (allerede kendte)</h4>
+        <div id="r-faste"></div>
+        <button type="button" id="r-tilfoej-fast">+ Tilføj fast udgift</button>
+      </div>
+      <div>
+        <h4>Daglige valg</h4>
+        <label>Mad
+          <select id="r-mad">
+            <option value="130">Supermarked / laver selv mad (~130 kr./dag pr. person)</option>
+            <option value="250">Mix – mest selv, ude af og til (~250 kr./dag)</option>
+            <option value="450">Spiser mest ude (~450 kr./dag)</option>
+          </select>
+        </label>
+        <label>Aktiviteter &amp; oplevelser
+          <select id="r-akt">
+            <option value="30">Lavt – mest gratis oplevelser (~30 kr./dag)</option>
+            <option value="75">Mellem – entré/museer af og til (~75 kr./dag)</option>
+            <option value="150">Højt – forlystelser, ture (~150 kr./dag)</option>
+          </select>
+        </label>
+        <label>Kører du i bil/autocamper? Forventet antal km i alt <input type="number" id="r-km" value="3000"></label>
+        <label>Brændstofpris + slid (kr./km) <input type="number" id="r-kmpris" value="1.2" step="0.1"></label>
+        <label>Shopping / tøj / souvenirs (samlet) <input type="number" id="r-shopping" value="500"> kr.</label>
+
+        <h4>Poster man tit glemmer ✓</h4>
+        <div class="checklist" id="r-glemte"></div>
+      </div>
+    </div>
+    <button type="submit" class="primary">Beregn estimat</button>
+  </form>
+  <div id="rejse-resultat" class="result-box hidden"></div>
+</section>
+</main>
+
+<footer>
+  <p>Dine data gemmes kun lokalt i din browser (localStorage) – intet sendes nogen steder hen.</p>
+</footer>
+
+<script src="app.js"></script>
+<script>
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  navigator.serviceWorker.register("sw.js");
+}
+</script>
+</body>
+</html>
