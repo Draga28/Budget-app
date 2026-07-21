@@ -25,14 +25,39 @@ Serveren er nødvendig, fordi API-nøgler og bank-tokens aldrig må ligge i en b
 
 Gratis hosting-muligheder: Cloudflare Workers (anbefalet), Deno Deploy eller Render.
 
-## Trin for at komme i gang
+## Status
 
-- [ ] David opretter gratis konto på [enablebanking.com](https://enablebanking.com) (Control Panel → registrér applikation, "Restricted Production")
-- [ ] Der genereres et nøglepar/certifikat til applikationen
-- [ ] Vælg hosting og læg nøglerne ind som hemmeligheder dér (aldrig i git!)
-- [ ] Byg serveren (koden kommer i `server/`-mappen i dette repo)
-- [ ] Tilføj "Forbind til Danske Bank"-knap i appen
+- [x] Konto oprettet på [enablebanking.com](https://enablebanking.com)
+- [x] RSA-nøglepar genereret
+- [x] Server bygget (`server/main.ts` – klar til Deno Deploy)
+- [x] "Forbind til Danske Bank"-knap i appen (under Ind & ud)
+- [ ] Server sat op på Deno Deploy
+- [ ] Applikation registreret i Enable Banking Control Panel
 - [ ] Første MitID-godkendelse og test
+
+## Opsætningsguide
+
+### 1. Server på Deno Deploy (gratis)
+1. Gå til [dash.deno.com](https://dash.deno.com) og log ind med GitHub
+2. "New project" → vælg repoet `Draga28/Budget-app` → entrypoint: `server/main.ts` → Deploy
+3. Notér projektets adresse, fx `https://budget-app.deno.dev`
+4. Under Settings → Environment variables tilføjes:
+   - `EB_APP_ID` – applikations-id fra Enable Banking (trin 2)
+   - `EB_PRIVATE_KEY` – hele indholdet af den private nøglefil
+   - `APP_TOKEN` – et selvvalgt kodeord (skrives også i appen)
+
+### 2. Applikation i Enable Banking Control Panel
+1. Applications → registrér ny applikation, navn fx "Davids Budget App"
+2. Miljø: **Production** (aktiveres i restricted mode ved at forbinde egne konti)
+3. Redirect URL: `https://<dit-projekt>.deno.dev/callback`
+4. Offentlig nøgle: indholdet af `eb-offentlig-noegle.pem`
+5. Kopiér applikations-id'et til `EB_APP_ID` på Deno Deploy
+
+### 3. I appen
+1. Ind & ud → "🏦 Automatisk fra Danske Bank" → fold "Opsætning" ud
+2. Indtast server-adresse og APP_TOKEN → Gem
+3. Tryk "Forbind til Danske Bank" → godkend med MitID
+4. Tryk "Hent nye posteringer" – færdig! Gentag når du vil have friske tal.
 
 ## Indtil da
 

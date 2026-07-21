@@ -9,6 +9,7 @@ let state = JSON.parse(localStorage.getItem(LS_KEY) || "null") || {
   posteringer: [],   // {id, type, tekst, beloeb, dato, kategori, fast}
   maal: [],          // {id, navn, beloeb, dato, prio}
 };
+if (!state.bank) state.bank = { server: "", token: "", sidst: "" };
 
 function gem() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 function kr(n) { return Math.round(n).toLocaleString("da-DK") + " kr."; }
@@ -224,6 +225,89 @@ function renderPosteringer() {
     viste.length ? `Ind: ${kr(ind)} · Ud: ${kr(ud)} · Netto: ${kr(ind - ud)}` : "";
 }
 
+/* Fælles import med dublet-kontrol og auto-kategorisering.
+   raekker: [{dato: "yyyy-mm-dd", tekst, beloeb (fortegn: minus = udgift)}] */
+function tilfoejPosteringer(raekker) {
+  let importeret = 0, sprunget = 0;
+  raekker.forEach(r => {
+    if (!r.dato || isNaN(r.beloeb)) return;
+    const type = r.beloeb >= 0 ? "indtaegt" : "udgift";
+    const beloeb = Math.abs(r.beloeb);
+    const findes = state.posteringer.some(x =>
+      x.dato === r.dato && x.tekst === r.tekst && x.beloeb === beloeb && x.type === type);
+    if (findes) { sprunget++; return; }
+    state.posteringer.push({
+      id: uid(), type, tekst: r.tekst, beloeb, dato: r.dato,
+      kategori: gaetKategori(r.tekst), fast: false,
+    });
+    importeret++;
+  });
+  gem(); renderAlt();
+  return { importeret, sprunget };
+}
+
+/* ---------- Automatisk hentning fra Danske Bank (via egen server) ---------- */
+function bankOpsat() { return state.bank.server && state.bank.token; }
+
+function bankStatus(tekst) {
+  document.getElementById("bank-status").textContent = tekst;
+}
+
+async function bankKald(sti, metode = "GET") {
+  const res = await fetch(state.bank.server.replace(/\/$/, "") + sti, {
+    method: metode,
+    headers: { "X-App-Token": state.bank.token },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.fejl || `Serverfejl (${res.status})`);
+  return data;
+}
+
+document.getElementById("bank-gem").addEventListener("click", () => {
+  state.bank.server = document.getElementById("bank-server").value.trim();
+  state.bank.token = document.getElementById("bank-token").value.trim();
+  gem();
+  bankStatus(bankOpsat() ? "Opsætning gemt ✓ – tryk “Forbind til Danske Bank”." : "Udfyld både server-adresse og kodeord.");
+});
+
+document.getElementById("bank-forbind").addEventListener("click", async () => {
+  if (!bankOpsat()) { bankStatus("Udfyld opsætningen først (fold “Opsætning” ud)."); return; }
+  try {
+    bankStatus("Starter MitID-godkendelse …");
+    const { url } = await bankKald("/forbind", "POST");
+    location.href = url; // videre til Danske Banks MitID-login
+  } catch (e) { bankStatus("⚠️ " + e.message); }
+});
+
+document.getElementById("bank-hent").addEventListener("click", async () => {
+  if (!bankOpsat()) { bankStatus("Udfyld opsætningen først (fold “Opsætning” ud)."); return; }
+  try {
+    bankStatus("Henter posteringer fra Danske Bank …");
+    // Hent med lidt overlap, dubletter sorteres alligevel fra
+    const fra = state.bank.sidst || new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
+    const { posteringer } = await bankKald(`/transaktioner?fra=${fra}`);
+    const { importeret, sprunget } = tilfoejPosteringer(posteringer);
+    state.bank.sidst = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+    gem();
+    bankStatus(`✅ Hentede ${importeret} nye posteringer${sprunget ? ` (${sprunget} dubletter sprunget over)` : ""}.`);
+  } catch (e) { bankStatus("⚠️ " + e.message); }
+});
+
+function initBank() {
+  document.getElementById("bank-server").value = state.bank.server;
+  document.getElementById("bank-token").value = state.bank.token;
+  const q = new URLSearchParams(location.search);
+  if (q.get("bank") === "forbundet") {
+    bankStatus("✅ Forbundet til Danske Bank! Tryk “Hent nye posteringer”.");
+    history.replaceState(null, "", location.pathname);
+  } else if (q.get("bank") === "fejl") {
+    bankStatus("⚠️ Godkendelsen blev afbrudt – prøv igen.");
+    history.replaceState(null, "", location.pathname);
+  } else if (bankOpsat()) {
+    bankStatus("Klar – tryk “Hent nye posteringer”, eller “Forbind” hvis adgangen er udløbet.");
+  }
+}
+
 /* ---------- CSV-import fra bank ---------- */
 document.getElementById("csv-fil").addEventListener("change", e => {
   const fil = e.target.files[0];
@@ -231,7 +315,7 @@ document.getElementById("csv-fil").addEventListener("change", e => {
   const laeser = new FileReader();
   laeser.onload = () => {
     const linjer = laeser.result.split(/\r?\n/).filter(l => l.trim());
-    let importeret = 0, sprunget = 0;
+    const raekker = [];
     linjer.forEach(linje => {
       // Danske Bank bruger semikolon og beløb med komma (fx "1.234,56")
       const sep = linje.includes(";") ? ";" : ",";
@@ -244,19 +328,9 @@ document.getElementById("csv-fil").addEventListener("change", e => {
       let dato = datoRaa;
       const m = datoRaa.match(/^(\d{2})[-\/.](\d{2})[-\/.](\d{4})$/);
       if (m) dato = `${m[3]}-${m[2]}-${m[1]}`;
-      const type = beloeb >= 0 ? "indtaegt" : "udgift";
-      // Spring dubletter over, så samme fil kan importeres flere gange
-      const findes = state.posteringer.some(x =>
-        x.dato === dato && x.tekst === tekst && x.beloeb === Math.abs(beloeb) && x.type === type);
-      if (findes) { sprunget++; return; }
-      state.posteringer.push({
-        id: uid(), type,
-        tekst, beloeb: Math.abs(beloeb), dato,
-        kategori: gaetKategori(tekst), fast: false,
-      });
-      importeret++;
+      raekker.push({ dato, tekst, beloeb });
     });
-    gem(); renderAlt();
+    const { importeret, sprunget } = tilfoejPosteringer(raekker);
     document.getElementById("csv-status").textContent =
       importeret > 0 ? `✅ Importerede ${importeret} posteringer.${sprunget ? ` (${sprunget} dubletter sprunget over)` : ""}`
       : sprunget > 0 ? `✅ Alt var allerede importeret (${sprunget} dubletter sprunget over).`
@@ -493,4 +567,5 @@ function renderAlt() {
 }
 renderGlemteListe();
 renderFasteUdgifter();
+initBank();
 renderAlt();

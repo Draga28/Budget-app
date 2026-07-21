@@ -82,6 +82,21 @@
         <button type="submit">Gem</button>
       </form>
 
+      <h3>🏦 Automatisk fra Danske Bank</h3>
+      <div class="bank-boks">
+        <p id="bank-status" class="hint">Ikke sat op endnu.</p>
+        <details class="hint">
+          <summary>Opsætning (én gang)</summary>
+          <label>Server-adresse <input type="text" id="bank-server" placeholder="https://dit-projekt.deno.dev"></label>
+          <label>Kodeord (APP_TOKEN) <input type="text" id="bank-token" placeholder="samme som på serveren"></label>
+          <button type="button" id="bank-gem">Gem opsætning</button>
+        </details>
+        <div class="bank-knapper">
+          <button type="button" id="bank-forbind">Forbind til Danske Bank (MitID)</button>
+          <button type="button" id="bank-hent">Hent nye posteringer</button>
+        </div>
+      </div>
+
       <h3>Import fra Danske Bank (CSV)</h3>
       <details class="hint">
         <summary>Sådan henter du filen fra Danske Bank (tryk her)</summary>
