@@ -82,9 +82,19 @@
         <button type="submit">Gem</button>
       </form>
 
-      <h3>Import fra bank (CSV)</h3>
-      <p class="hint">Eksportér CSV fra din netbank og træk filen herind. Kolonner: dato; tekst; beløb (negativt = udgift). De fleste danske banker (Danske Bank, Nordea, Lunar m.fl.) kan eksportere CSV.</p>
-      <input type="file" id="csv-fil" accept=".csv">
+      <h3>Import fra Danske Bank (CSV)</h3>
+      <details class="hint">
+        <summary>Sådan henter du filen fra Danske Bank (tryk her)</summary>
+        <ol>
+          <li>Log ind i <strong>Danske Banks netbank</strong> på computeren (danskebank.dk)</li>
+          <li>Vælg din konto → <strong>"Søg på posteringer"</strong></li>
+          <li>Vælg periode (fx sidste måned) og tryk søg</li>
+          <li>Tryk på <strong>eksport-ikonet</strong> og vælg <strong>CSV</strong></li>
+          <li>Vælg filen herunder – posteringerne bliver automatisk kategoriseret 🍎🚗🏠</li>
+        </ol>
+        <p>Har du allerede importeret en periode, kan du roligt importere igen – dubletter springes over.</p>
+      </details>
+      <input type="file" id="csv-fil" accept=".csv,.txt">
       <p id="csv-status"></p>
     </div>
     <div>

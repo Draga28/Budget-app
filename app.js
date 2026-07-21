@@ -231,20 +231,26 @@ document.getElementById("csv-fil").addEventListener("change", e => {
   const laeser = new FileReader();
   laeser.onload = () => {
     const linjer = laeser.result.split(/\r?\n/).filter(l => l.trim());
-    let importeret = 0;
+    let importeret = 0, sprunget = 0;
     linjer.forEach(linje => {
-      const dele = linje.split(/[;,]/).map(s => s.trim().replace(/^"|"$/g, ""));
+      // Danske Bank bruger semikolon og beløb med komma (fx "1.234,56")
+      const sep = linje.includes(";") ? ";" : ",";
+      const dele = linje.split(sep).map(s => s.trim().replace(/^"|"$/g, ""));
       if (dele.length < 3) return;
       const [datoRaa, tekst, beloebRaa] = dele;
       const beloeb = parseFloat(beloebRaa.replace(/\./g, "").replace(",", "."));
       if (isNaN(beloeb) || !/\d{2,4}/.test(datoRaa)) return; // spring header over
-      // Understøt både 21-07-2026 og 2026-07-21
+      // Understøt både 21.07.2026, 21-07-2026 og 2026-07-21
       let dato = datoRaa;
       const m = datoRaa.match(/^(\d{2})[-\/.](\d{2})[-\/.](\d{4})$/);
       if (m) dato = `${m[3]}-${m[2]}-${m[1]}`;
+      const type = beloeb >= 0 ? "indtaegt" : "udgift";
+      // Spring dubletter over, så samme fil kan importeres flere gange
+      const findes = state.posteringer.some(x =>
+        x.dato === dato && x.tekst === tekst && x.beloeb === Math.abs(beloeb) && x.type === type);
+      if (findes) { sprunget++; return; }
       state.posteringer.push({
-        id: uid(),
-        type: beloeb >= 0 ? "indtaegt" : "udgift",
+        id: uid(), type,
         tekst, beloeb: Math.abs(beloeb), dato,
         kategori: gaetKategori(tekst), fast: false,
       });
@@ -252,8 +258,9 @@ document.getElementById("csv-fil").addEventListener("change", e => {
     });
     gem(); renderAlt();
     document.getElementById("csv-status").textContent =
-      importeret > 0 ? `✅ Importerede ${importeret} posteringer.`
-                     : "⚠️ Kunne ikke læse filen – tjek at formatet er: dato; tekst; beløb";
+      importeret > 0 ? `✅ Importerede ${importeret} posteringer.${sprunget ? ` (${sprunget} dubletter sprunget over)` : ""}`
+      : sprunget > 0 ? `✅ Alt var allerede importeret (${sprunget} dubletter sprunget over).`
+      : "⚠️ Kunne ikke læse filen – tjek at formatet er: dato; tekst; beløb";
   };
   laeser.readAsText(fil, "utf-8");
   e.target.value = "";
