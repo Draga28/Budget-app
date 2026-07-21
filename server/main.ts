@@ -14,8 +14,9 @@ const PRIVATE_KEY_PEM = Deno.env.get("EB_PRIVATE_KEY") ?? "";
 const APP_TOKEN = Deno.env.get("APP_TOKEN") ?? "";
 const APP_URL = Deno.env.get("APP_URL") ?? "https://draga28.github.io/Budget-app/";
 const API = "https://api.enablebanking.com";
-
-const kv = await Deno.openKv();
+/* Serveren gemmer ingenting: forbundne konti opbevares i appen på
+   telefonen og sendes med i kaldene. Derfor virker den på både gammel
+   og ny Deno Deploy uden database. */
 
 /* ---------- JWT-signering (RS256) til Enable Banking ---------- */
 function b64url(data: Uint8Array | string): string {
@@ -103,25 +104,22 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return svar({});
 
   try {
-    /* Status – bruges af appen til at vise om der er forbindelse */
+    /* Status – bruges af appen til at teste opsætningen */
     if (url.pathname === "/status" && req.method === "GET") {
       if (!tjekToken(req)) return svar({ fejl: "forkert token" }, 401);
-      const konti = (await kv.get<string[]>(["konti"])).value ?? [];
-      return svar({ ok: true, forbundet: konti.length > 0, antalKonti: konti.length });
+      return svar({ ok: true });
     }
 
     /* Start MitID-godkendelse hos Danske Bank */
     if (url.pathname === "/forbind" && req.method === "POST") {
       if (!tjekToken(req)) return svar({ fejl: "forkert token" }, 401);
       const gyldigTil = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-      const state = crypto.randomUUID();
-      await kv.set(["state", state], true, { expireIn: 30 * 60 * 1000 });
       const auth = await eb("/auth", {
         method: "POST",
         body: JSON.stringify({
           access: { valid_until: gyldigTil },
           aspsp: { name: "Danske Bank", country: "DK" },
-          state,
+          state: crypto.randomUUID(),
           redirect_url: `${url.origin}/callback`,
           psu_type: "personal",
         }),
@@ -129,28 +127,26 @@ Deno.serve(async (req: Request) => {
       return svar({ url: auth.url });
     }
 
-    /* Banken sender brugeren retur hertil efter MitID-godkendelse */
+    /* Banken sender brugeren retur hertil efter MitID-godkendelse.
+       Konto-id'erne sendes videre til appen i URL-fragmentet og gemmes dér. */
     if (url.pathname === "/callback" && req.method === "GET") {
       const code = url.searchParams.get("code");
-      const state = url.searchParams.get("state") ?? "";
-      const kendtState = (await kv.get(["state", state])).value;
-      if (!code || !kendtState) {
-        return Response.redirect(`${APP_URL}?bank=fejl`, 302);
-      }
-      await kv.delete(["state", state]);
+      if (!code) return Response.redirect(`${APP_URL}#bank=fejl`, 302);
       const session = await eb("/sessions", {
         method: "POST",
         body: JSON.stringify({ code }),
       });
-      await kv.set(["konti"], session.accounts ?? []);
-      return Response.redirect(`${APP_URL}?bank=forbundet`, 302);
+      const kontoIds = (session.accounts ?? []).map((a: unknown) =>
+        typeof a === "string" ? a : (a as { uid?: string }).uid ?? "").filter(Boolean);
+      const konti = encodeURIComponent(btoa(JSON.stringify(kontoIds)));
+      return Response.redirect(`${APP_URL}#bank=forbundet&konti=${konti}`, 302);
     }
 
-    /* Hent transaktioner fra alle forbundne konti */
+    /* Hent transaktioner – appen sender sine gemte konto-id'er med */
     if (url.pathname === "/transaktioner" && req.method === "GET") {
       if (!tjekToken(req)) return svar({ fejl: "forkert token" }, 401);
-      const konti = (await kv.get<string[]>(["konti"])).value ?? [];
-      if (konti.length === 0) return svar({ fejl: "ingen konti forbundet endnu" }, 409);
+      const konti = (url.searchParams.get("konti") ?? "").split(",").filter(Boolean);
+      if (konti.length === 0) return svar({ fejl: "ingen konti forbundet endnu – tryk Forbind først" }, 409);
       const fra = url.searchParams.get("fra") ??
         new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       const alle: unknown[] = [];

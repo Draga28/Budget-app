@@ -9,7 +9,8 @@ let state = JSON.parse(localStorage.getItem(LS_KEY) || "null") || {
   posteringer: [],   // {id, type, tekst, beloeb, dato, kategori, fast}
   maal: [],          // {id, navn, beloeb, dato, prio}
 };
-if (!state.bank) state.bank = { server: "", token: "", sidst: "" };
+if (!state.bank) state.bank = { server: "", token: "", sidst: "", konti: [] };
+if (!state.bank.konti) state.bank.konti = [];
 
 function gem() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 function kr(n) { return Math.round(n).toLocaleString("da-DK") + " kr."; }
@@ -281,11 +282,12 @@ document.getElementById("bank-forbind").addEventListener("click", async () => {
 
 document.getElementById("bank-hent").addEventListener("click", async () => {
   if (!bankOpsat()) { bankStatus("Udfyld opsætningen først (fold “Opsætning” ud)."); return; }
+  if (state.bank.konti.length === 0) { bankStatus("Forbind til Danske Bank først (MitID)."); return; }
   try {
     bankStatus("Henter posteringer fra Danske Bank …");
     // Hent med lidt overlap, dubletter sorteres alligevel fra
     const fra = state.bank.sidst || new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
-    const { posteringer } = await bankKald(`/transaktioner?fra=${fra}`);
+    const { posteringer } = await bankKald(`/transaktioner?fra=${fra}&konti=${encodeURIComponent(state.bank.konti.join(","))}`);
     const { importeret, sprunget } = tilfoejPosteringer(posteringer);
     state.bank.sidst = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
     gem();
@@ -296,15 +298,24 @@ document.getElementById("bank-hent").addEventListener("click", async () => {
 function initBank() {
   document.getElementById("bank-server").value = state.bank.server;
   document.getElementById("bank-token").value = state.bank.token;
-  const q = new URLSearchParams(location.search);
-  if (q.get("bank") === "forbundet") {
-    bankStatus("✅ Forbundet til Danske Bank! Tryk “Hent nye posteringer”.");
+  // Serveren sender os retur med konto-id'erne i URL-fragmentet
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+  if (hash.get("bank") === "forbundet") {
+    try {
+      state.bank.konti = JSON.parse(atob(decodeURIComponent(hash.get("konti") || ""))) || [];
+    } catch { state.bank.konti = []; }
+    gem();
+    bankStatus(state.bank.konti.length
+      ? `✅ Forbundet til Danske Bank (${state.bank.konti.length} konto/konti)! Tryk “Hent nye posteringer”.`
+      : "⚠️ Forbundet, men ingen konti fundet – prøv igen.");
     history.replaceState(null, "", location.pathname);
-  } else if (q.get("bank") === "fejl") {
+  } else if (hash.get("bank") === "fejl") {
     bankStatus("⚠️ Godkendelsen blev afbrudt – prøv igen.");
     history.replaceState(null, "", location.pathname);
   } else if (bankOpsat()) {
-    bankStatus("Klar – tryk “Hent nye posteringer”, eller “Forbind” hvis adgangen er udløbet.");
+    bankStatus(state.bank.konti.length
+      ? "Klar – tryk “Hent nye posteringer”, eller “Forbind” hvis adgangen er udløbet."
+      : "Opsætning gemt – tryk “Forbind til Danske Bank” for at godkende med MitID.");
   }
 }
 
