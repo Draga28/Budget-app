@@ -397,19 +397,14 @@ function renderMaalListe(container, medSlet) {
 }
 
 /* ---------- Køb-tjek ---------- */
-document.getElementById("koeb-form").addEventListener("submit", e => {
-  e.preventDefault();
-  const pris = Number(document.getElementById("k-pris").value);
-  const tekst = document.getElementById("k-tekst").value || "købet";
+/* Vurderer et køb op mod opsparing, overskud og alle mål.
+   Bruges af både Køb-fanen og Spar-botten. */
+function vurderKoeb(pris) {
   const saldo = opsparing();
   const overskud = maanedligtOverskud();
-  const boks = document.getElementById("koeb-resultat");
-  boks.classList.remove("hidden", "ok", "advarsel", "nej");
-
   // Hvor mange penge skal der stå klar til målene på deres deadlines?
-  // Simulér måned for måned: saldo efter køb + overskud, tjek hvert mål på dets deadline.
   const maalSorteret = [...state.maal].sort((a, b) => a.dato.localeCompare(b.dato));
-  let problemer = [];
+  const problemer = [];
   let reserveretTilMaal = 0;
   maalSorteret.forEach(m => {
     reserveretTilMaal += m.beloeb;
@@ -419,10 +414,22 @@ document.getElementById("koeb-form").addEventListener("submit", e => {
       problemer.push({ maal: m, mangler: reserveretTilMaal - tilRaadighedVedDeadline });
     }
   });
+  const ventMdr = overskud > 0 && problemer.length
+    ? Math.ceil(Math.max(...problemer.map(p => p.mangler)) / overskud) : null;
+  const mdrTilRaad = pris > saldo && overskud > 0 ? Math.ceil((pris - saldo) / overskud) : null;
+  return { saldo, overskud, problemer, ventMdr, mdrTilRaad, harPenge: pris <= saldo };
+}
+
+document.getElementById("koeb-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const pris = Number(document.getElementById("k-pris").value);
+  const tekst = document.getElementById("k-tekst").value || "købet";
+  const boks = document.getElementById("koeb-resultat");
+  boks.classList.remove("hidden", "ok", "advarsel", "nej");
+  const { saldo, overskud, problemer, ventMdr, mdrTilRaad } = vurderKoeb(pris);
 
   if (pris > saldo) {
     boks.classList.add("nej");
-    const mdrTilRaad = overskud > 0 ? Math.ceil((pris - saldo) / overskud) : null;
     boks.innerHTML = `<h3>🔴 Nej – du har ikke pengene endnu</h3>
       <p>${tekst} koster ${kr(pris)}, men din opsparing er ${kr(saldo)}.</p>
       ${mdrTilRaad ? `<p>Med dit nuværende overskud på ${kr(overskud)}/md. har du råd om ca. <strong>${mdrTilRaad} måned(er)</strong> – og det er uden at tage hensyn til dine mål.</p>`
@@ -434,15 +441,12 @@ document.getElementById("koeb-form").addEventListener("submit", e => {
       <p>Opsparing efter køb: <strong>${kr(saldo - pris)}</strong> · Månedligt overskud: ${kr(overskud)}</p>`;
   } else {
     boks.classList.add("advarsel");
-    const vent = overskud > 0
-      ? Math.ceil(Math.max(...problemer.map(p => p.mangler)) / overskud)
-      : null;
     boks.innerHTML = `<h3>🟡 Teknisk set råd – men det går ud over dine mål</h3>
       <p>Hvis du køber ${tekst} til ${kr(pris)} nu, kommer du bagud med:</p>
       <ul>${problemer.map(p =>
         `<li><strong>${p.maal.navn}</strong> (senest ${new Date(p.maal.dato).toLocaleDateString("da-DK")}) – mangler ca. ${kr(p.mangler)} til deadline</li>`).join("")}
       </ul>
-      ${vent ? `<p>💡 Venter du ca. <strong>${vent} måned(er)</strong>, kan du købe det uden at gå på kompromis med målene.</p>` : ""}`;
+      ${ventMdr ? `<p>💡 Venter du ca. <strong>${ventMdr} måned(er)</strong>, kan du købe det uden at gå på kompromis med målene.</p>` : ""}`;
   }
 });
 
@@ -559,6 +563,139 @@ document.getElementById("rejse-form").addEventListener("submit", e => {
     ${glemteValgte.length ? `<details><summary>Glemte poster medregnet</summary><ul>${glemteValgte.map(g => `<li>${g}</li>`).join("")}</ul></details>` : ""}`;
 });
 
+/* ---------- Spar-bot ---------- */
+const CHAT_CHIPS = [
+  "Hvordan ser min økonomi ud?",
+  "Kan jeg købe en computer til 10.000 kr.?",
+  "Læg en opsparingsplan for mine mål",
+  "Hvad må ferien koste pr. dag?",
+];
+
+function escHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function chatBesked(html, fraBot) {
+  const div = document.createElement("div");
+  div.className = "chat-besked " + (fraBot ? "bot" : "mig");
+  div.innerHTML = html;
+  const vindue = document.getElementById("chat-vindue");
+  vindue.appendChild(div);
+  vindue.scrollTop = vindue.scrollHeight;
+}
+
+/* Træk et beløb ud af teksten, fx "10.000 kr", "10000", "10.000,50" */
+function findBeloeb(t) {
+  const m = t.replace(/\s/g, " ").match(/(\d{1,3}(?:\.\d{3})+|\d+)(?:,\d+)?\s*(?:kr|kroner|,-)?/i);
+  return m ? parseFloat(m[1].replace(/\./g, "")) : null;
+}
+
+function botSvar(spgRaa) {
+  const spg = spgRaa.toLowerCase();
+  const saldo = opsparing();
+  const overskud = maanedligtOverskud();
+  const beloeb = findBeloeb(spg);
+
+  /* Status / overblik */
+  if (/hvordan|status|økonomi|overblik|står det/.test(spg)) {
+    const { ind, ud } = denneMaaned();
+    const antalMaal = state.maal.length;
+    return `Sådan ser det ud lige nu:<br>
+      💰 Opsparing: <strong>${kr(saldo)}</strong><br>
+      📈 Månedligt overskud: <strong>${kr(overskud)}</strong><br>
+      📅 Denne måned: ${kr(ind)} ind / ${kr(ud)} ud<br>
+      🎯 ${antalMaal ? `${antalMaal} mål – se status på Overblik-fanen` : "Ingen mål endnu – opret et under 🎯 Mål, så kan jeg lægge planer for dig"}`;
+  }
+
+  /* Køb-vurdering */
+  if (beloeb && /køb|råd|anskaf|investere|purchase|koste/.test(spg) || (beloeb && spg.trim().split(" ").length <= 4)) {
+    const v = vurderKoeb(beloeb);
+    if (!v.harPenge) {
+      return `🔴 Et køb til <strong>${kr(beloeb)}</strong> kan ikke lade sig gøre endnu – din opsparing er ${kr(v.saldo)}.` +
+        (v.mdrTilRaad ? `<br>💡 <strong>Planen:</strong> Med ${kr(v.overskud)} i overskud pr. måned har du beløbet om ca. <strong>${v.mdrTilRaad} måned(er)</strong>.` :
+          `<br>Dit månedlige overskud er 0 eller negativt – kig først på, hvor der kan spares (se kategorierne på Overblik-fanen).`);
+    }
+    if (v.problemer.length === 0) {
+      return `🟢 Ja! Et køb til <strong>${kr(beloeb)}</strong> er realistisk. Du har ${kr(v.saldo)} og når stadig alle dine mål. Efter købet: ${kr(v.saldo - beloeb)} tilbage.`;
+    }
+    return `🟡 Du <em>har</em> pengene, men det går ud over: ${v.problemer.map(p => `<strong>${escHtml(p.maal.navn)}</strong> (mangler så ${kr(p.mangler)})`).join(", ")}.` +
+      (v.ventMdr ? `<br>💡 <strong>Planen:</strong> Vent ca. <strong>${v.ventMdr} måned(er)</strong> – så kan du købe det uden at røre målene.` : "");
+  }
+
+  /* Opsparingsplan for målene */
+  if (/plan|spare op|opspar|nå mine mål|hvordan når/.test(spg)) {
+    if (state.maal.length === 0) {
+      return `Du har ingen mål endnu. Opret fx “Ferie i Spanien – 20.000 kr.” under 🎯 Mål, så regner jeg planen ud.`;
+    }
+    let rest = saldo, kraevetIalt = 0;
+    const linjer = [...state.maal]
+      .sort((a, b) => a.prio - b.prio || a.dato.localeCompare(b.dato))
+      .map(m => {
+        const daekket = Math.max(0, Math.min(m.beloeb, rest));
+        rest -= daekket;
+        const mangler = m.beloeb - daekket;
+        const mdr = Math.max(1, maanederTil(m.dato));
+        const prMd = mangler / mdr;
+        kraevetIalt += prMd;
+        return `🎯 <strong>${escHtml(m.navn)}</strong>: ${mangler <= 0 ? "allerede dækket ✅" : `læg <strong>${kr(prMd)}</strong> til side pr. måned frem til ${new Date(m.dato).toLocaleDateString("da-DK")}`}`;
+      });
+    const dom = kraevetIalt <= overskud
+      ? `✅ Det kræver <strong>${kr(kraevetIalt)}/md.</strong> i alt – og dit overskud er ${kr(overskud)}, så planen holder. Resten (${kr(overskud - kraevetIalt)}/md.) er til dig!`
+      : `⚠️ Det kræver <strong>${kr(kraevetIalt)}/md.</strong>, men dit overskud er kun ${kr(overskud)}. Muligheder: ryk en deadline, sænk et målbeløb – eller find besparelser i din største kategori (se Overblik).`;
+    return `Her er planen:<br>${linjer.join("<br>")}<br><br>${dom}`;
+  }
+
+  /* Ferie / dagsbudget */
+  if (/ferie|rejse|spanien|pr\. dag|per dag|dagsbudget/.test(spg)) {
+    const budget = beloeb || Number(document.getElementById("r-budget").value) || 20000;
+    const dage = Number(document.getElementById("r-dage").value) || 37;
+    const fast = fasteUdgifter.reduce((a, f) => a + f.beloeb, 0);
+    const prDag = (budget - fast) / dage;
+    return `Med et loft på <strong>${kr(budget)}</strong> og ${kr(fast)} i faste rejseudgifter har du <strong>${kr(budget - fast)}</strong> til ${dage} dage = <strong>${kr(prDag)}/dag</strong>.<br>
+      Til sammenligning: supermarkedsmad koster ~130 kr./dag, og brændstof/småting løber let op i 100+ kr./dag.<br>
+      💡 Brug ✈️ Rejse-fanen til at skrue på valgene og se, om det hænger sammen – husk de “glemte poster”!`;
+  }
+
+  /* Beløb uden tydelig sammenhæng → behandl som køb */
+  if (beloeb) {
+    const v = vurderKoeb(beloeb);
+    return v.harPenge && v.problemer.length === 0
+      ? `Hvis du mener et køb til ${kr(beloeb)}: 🟢 ja, det er der plads til.`
+      : `Hvis du mener et køb til ${kr(beloeb)}: ${v.harPenge ? "🟡 muligt, men det presser dine mål" : "🔴 ikke endnu"}${v.ventMdr || v.mdrTilRaad ? ` – vent ca. ${v.ventMdr || v.mdrTilRaad} måned(er)` : ""}. Spørg fx “Kan jeg købe X til ${kr(beloeb)}?” for detaljer.`;
+  }
+
+  return `Det kan jeg ikke helt regne på endnu 🤔 Prøv fx:<br>
+    • “Hvordan ser min økonomi ud?”<br>
+    • “Kan jeg købe en computer til 10.000 kr.?”<br>
+    • “Læg en opsparingsplan for mine mål”<br>
+    • “Hvad må ferien koste pr. dag?”`;
+}
+
+function stilSpoergsmaal(tekst) {
+  chatBesked(escHtml(tekst), false);
+  setTimeout(() => chatBesked(botSvar(tekst), true), 150);
+}
+
+document.getElementById("chat-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const input = document.getElementById("chat-input");
+  const tekst = input.value.trim();
+  if (!tekst) return;
+  input.value = "";
+  stilSpoergsmaal(tekst);
+});
+
+function initChat() {
+  const chips = document.getElementById("chat-chips");
+  CHAT_CHIPS.forEach(c => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = c;
+    b.addEventListener("click", () => stilSpoergsmaal(c));
+    chips.appendChild(b);
+  });
+  chatBesked(`Hej David! 👋 Jeg er din budget-bot. Spørg mig om køb, planer og ferier – jeg svarer ud fra dine egne tal. Prøv en af knapperne herunder.`, true);
+}
+
 /* ---------- Init ---------- */
 function renderAlt() {
   renderOverblik();
@@ -568,4 +705,5 @@ function renderAlt() {
 renderGlemteListe();
 renderFasteUdgifter();
 initBank();
+initChat();
 renderAlt();

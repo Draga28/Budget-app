@@ -20,6 +20,7 @@
     <button class="tab-btn" data-tab="maal"><span class="ikon">🎯</span><span>Mål</span></button>
     <button class="tab-btn" data-tab="koebtjek"><span class="ikon">🛒</span><span>Køb?</span></button>
     <button class="tab-btn" data-tab="rejse"><span class="ikon">✈️</span><span>Rejse</span></button>
+    <button class="tab-btn" data-tab="spar"><span class="ikon">💬</span><span>Spar</span></button>
   </nav>
 </header>
 
@@ -206,6 +207,17 @@
     <button type="submit" class="primary">Beregn estimat</button>
   </form>
   <div id="rejse-resultat" class="result-box hidden"></div>
+</section>
+<!-- ===================== SPAR-BOT ===================== -->
+<section id="spar" class="tab">
+  <h3>💬 Spar med din budget-bot</h3>
+  <p class="hint">Botten svarer ud fra dine egne tal – opsparing, overskud og mål. Alt foregår på din telefon, intet sendes nogen steder hen.</p>
+  <div id="chat-vindue" class="chat-vindue"></div>
+  <div id="chat-chips" class="chat-chips"></div>
+  <form id="chat-form" class="chat-form">
+    <input type="text" id="chat-input" placeholder="Spørg fx: Kan jeg købe en computer til 10.000 kr.?" autocomplete="off">
+    <button type="submit">Send</button>
+  </form>
 </section>
 </main>
 
