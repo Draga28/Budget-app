@@ -85,9 +85,17 @@ main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1rem; }
 .bank-knapper { display: flex; gap: .6rem; flex-wrap: wrap; }
 .bank-knapper button { margin-top: .3rem; }
 
-/* Månedsvælger over posteringstabellen */
+/* Månedsvælger + søgning over posteringstabellen */
 .maaned-vaelger { display: flex; align-items: center; gap: .8rem; margin: .5rem 0 .8rem; flex-wrap: wrap; }
 .maaned-vaelger select { width: auto; }
+.maaned-vaelger input[type=search] { flex: 1; min-width: 140px; margin-top: 0; }
+
+/* Grafer */
+.graf svg { width: 100%; height: auto; display: block; }
+.graf-signatur { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .5rem; font-size: .82rem; color: #52514e; }
+.graf-signatur.lodret { flex-direction: column; gap: .25rem; }
+.graf-signatur i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: .35rem; }
+.graf-signatur strong { color: #0b0b0b; }
 
 form label { display: block; margin: .6rem 0; font-size: .95rem; }
 input[type=text], input[type=number], input[type=date], select {

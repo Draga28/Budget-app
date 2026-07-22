@@ -43,6 +43,17 @@
       <p>Udgifter: <strong id="ov-ud">0 kr.</strong></p>
     </div>
   </div>
+  <h3>📈 Udvikling</h3>
+  <div class="split">
+    <div class="card">
+      <h3>Ind og ud pr. måned (sidste 6 mdr.)</h3>
+      <div id="graf-soejler" class="graf"></div>
+    </div>
+    <div class="card">
+      <h3>Udgifter pr. kategori (sidste 3 mdr.)</h3>
+      <div id="graf-cirkel" class="graf"></div>
+    </div>
+  </div>
   <div class="split">
     <div>
       <h3>Udgifter denne måned – pr. kategori</h3>
@@ -117,6 +128,7 @@
       <h3>Posteringer</h3>
       <div class="maaned-vaelger">
         <select id="p-maaned"></select>
+        <input type="search" id="p-soeg" placeholder="Søg i tekst/kategori …">
         <span id="p-maaned-sum" class="hint"></span>
       </div>
       <table id="post-tabel">

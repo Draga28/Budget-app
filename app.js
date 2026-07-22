@@ -108,9 +108,126 @@ function renderOverblik() {
   document.getElementById("ov-ind").textContent = kr(ind);
   document.getElementById("ov-ud").textContent = kr(ud);
   document.getElementById("startsaldo").value = state.startsaldo;
+  renderSoejler();
+  renderCirkel();
   renderKategorier();
   renderSeneste();
   renderMaalListe(document.getElementById("ov-maal-liste"), false);
+}
+
+/* ---------- Grafer (ren SVG, farver fra valideret palette) ---------- */
+const GRAF_FARVER = { ind: "#2a78d6", ud: "#eb6834" };
+/* Fast farve pr. kategori – farven følger kategorien, ikke størrelsen */
+const KAT_FARVE = {
+  "Bolig": "#2a78d6", "Mad": "#eb6834", "Transport": "#1baf7a", "Fritid": "#eda100",
+  "Tøj": "#e87ba4", "Abonnementer": "#4a3aa7", "Rejse": "#008300", "Løn": "#2a78d6", "Andet": "#8a8987",
+};
+const MDR_NAVNE = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+
+function kompaktKr(n) {
+  return n >= 1000 ? Math.round(n / 1000) + "k" : String(Math.round(n));
+}
+
+/* Søjlediagram: indtægter og udgifter pr. måned, sidste 6 måneder */
+function renderSoejler() {
+  const nu = new Date();
+  const mdr = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(nu.getFullYear(), nu.getMonth() - i, 1);
+    mdr.push({ aar: d.getFullYear(), md: d.getMonth(), ind: 0, ud: 0 });
+  }
+  state.posteringer.forEach(p => {
+    const d = new Date(p.dato);
+    const m = mdr.find(x => x.aar === d.getFullYear() && x.md === d.getMonth());
+    if (m) { if (p.type === "indtaegt") m.ind += p.beloeb; else m.ud += p.beloeb; }
+  });
+  const div = document.getElementById("graf-soejler");
+  const maks = Math.max(...mdr.map(m => Math.max(m.ind, m.ud)), 1);
+  const W = 360, H = 210, top = 12, bund = 26, venstre = 34;
+  const plotH = H - top - bund, plotW = W - venstre - 6;
+  const gruppeB = plotW / 6;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Indtægter og udgifter pr. måned">`;
+  // Gitterlinjer + akse-tal (diskrete)
+  for (let i = 0; i <= 3; i++) {
+    const vaerdi = maks * i / 3;
+    const y = top + plotH - (plotH * i / 3);
+    s += `<line x1="${venstre}" y1="${y}" x2="${W - 6}" y2="${y}" stroke="#e5eaf0" stroke-width="1"/>`;
+    s += `<text x="${venstre - 5}" y="${y + 3}" text-anchor="end" font-size="9" fill="#8a8987">${kompaktKr(vaerdi)}</text>`;
+  }
+  // Søjler: afrundet top (4px), flad bund mod grundlinjen, 2px luft mellem naboer
+  const soejleB = Math.min(20, gruppeB / 2 - 6);
+  const soejle = (x, hoejde, farve, titel) => {
+    if (hoejde < 1) hoejde = 1;
+    const y = top + plotH - hoejde;
+    const r = Math.min(4, soejleB / 2, hoejde);
+    return `<path d="M${x},${top + plotH} V${y + r} Q${x},${y} ${x + r},${y} H${x + soejleB - r} Q${x + soejleB},${y} ${x + soejleB},${y + r} V${top + plotH} Z" fill="${farve}"><title>${titel}</title></path>`;
+  };
+  mdr.forEach((m, i) => {
+    const midt = venstre + gruppeB * i + gruppeB / 2;
+    const navn = MDR_NAVNE[m.md];
+    s += soejle(midt - soejleB - 1, plotH * m.ind / maks, GRAF_FARVER.ind, `${navn}: ${kr(m.ind)} ind`);
+    s += soejle(midt + 1, plotH * m.ud / maks, GRAF_FARVER.ud, `${navn}: ${kr(m.ud)} ud`);
+    s += `<text x="${midt}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#52514e">${navn}</text>`;
+  });
+  s += `<line x1="${venstre}" y1="${top + plotH}" x2="${W - 6}" y2="${top + plotH}" stroke="#cbd5e1" stroke-width="1"/>`;
+  s += `</svg>
+    <div class="graf-signatur">
+      <span><i style="background:${GRAF_FARVER.ind}"></i>Indtægter</span>
+      <span><i style="background:${GRAF_FARVER.ud}"></i>Udgifter</span>
+    </div>`;
+  div.innerHTML = s;
+}
+
+/* Cirkeldiagram (doughnut): udgifter pr. kategori, sidste 3 måneder */
+function renderCirkel() {
+  const nu = new Date();
+  const graense = new Date(nu.getFullYear(), nu.getMonth() - 2, 1);
+  const sum = {};
+  let total = 0;
+  state.posteringer.forEach(p => {
+    const d = new Date(p.dato);
+    if (p.type === "udgift" && d >= graense) {
+      sum[p.kategori] = (sum[p.kategori] || 0) + p.beloeb;
+      total += p.beloeb;
+    }
+  });
+  const div = document.getElementById("graf-cirkel");
+  if (total === 0) {
+    div.innerHTML = "<p class='hint'>Ingen udgifter registreret endnu – importér fra banken eller tast ind, så tegnes grafen her.</p>";
+    return;
+  }
+  // Top 5 kategorier + resten samlet som "Andet"
+  let par = Object.entries(sum).sort((a, b) => b[1] - a[1]);
+  if (par.length > 6) {
+    const rest = par.slice(5).reduce((a, [, v]) => a + v, 0);
+    par = par.slice(0, 5);
+    const eksisterende = par.find(([k]) => k === "Andet");
+    if (eksisterende) eksisterende[1] += rest;
+    else par.push(["Andet", rest]);
+  }
+  const R = 70, r = 44, C = 105;
+  let vinkel = -Math.PI / 2;
+  let s = `<svg viewBox="0 0 210 210" role="img" aria-label="Udgifter pr. kategori">`;
+  par.forEach(([kat, beloeb]) => {
+    const andel = beloeb / total;
+    const slut = vinkel + andel * Math.PI * 2;
+    const stor = andel > 0.5 ? 1 : 0;
+    const x1 = C + R * Math.cos(vinkel), y1 = C + R * Math.sin(vinkel);
+    const x2 = C + R * Math.cos(slut), y2 = C + R * Math.sin(slut);
+    const x3 = C + r * Math.cos(slut), y3 = C + r * Math.sin(slut);
+    const x4 = C + r * Math.cos(vinkel), y4 = C + r * Math.sin(vinkel);
+    s += `<path d="M${x1},${y1} A${R},${R} 0 ${stor} 1 ${x2},${y2} L${x3},${y3} A${r},${r} 0 ${stor} 0 ${x4},${y4} Z"
+      fill="${KAT_FARVE[kat] || "#8a8987"}" stroke="#fff" stroke-width="2"><title>${kat}: ${kr(beloeb)} (${Math.round(andel * 100)} %)</title></path>`;
+    vinkel = slut;
+  });
+  s += `<text x="${C}" y="${C - 4}" text-anchor="middle" font-size="12" fill="#52514e">I alt</text>`;
+  s += `<text x="${C}" y="${C + 14}" text-anchor="middle" font-size="14" font-weight="700" fill="#0b0b0b">${kr(total)}</text>`;
+  s += `</svg><div class="graf-signatur lodret">`;
+  par.forEach(([kat, beloeb]) => {
+    s += `<span><i style="background:${KAT_FARVE[kat] || "#8a8987"}"></i>${KAT_EMOJI[kat] || "📦"} ${kat} · <strong>${kr(beloeb)}</strong> (${Math.round(beloeb / total * 100)} %)</span>`;
+  });
+  s += `</div>`;
+  div.innerHTML = s;
 }
 
 /* Søjler pr. kategori for denne måneds udgifter */
@@ -174,6 +291,8 @@ document.getElementById("p-maaned").addEventListener("change", e => {
   renderPosteringer();
 });
 
+document.getElementById("p-soeg").addEventListener("input", () => renderPosteringer());
+
 function renderMaanedVaelger() {
   const select = document.getElementById("p-maaned");
   const maaneder = [...new Set(state.posteringer.map(p => p.dato.slice(0, 7)))].sort().reverse();
@@ -207,8 +326,10 @@ function renderPosteringer() {
   renderMaanedVaelger();
   const tbody = document.querySelector("#post-tabel tbody");
   tbody.innerHTML = "";
+  const soeg = (document.getElementById("p-soeg").value || "").toLowerCase().trim();
   const viste = [...state.posteringer]
     .filter(p => valgtMaaned === "alle" || p.dato.startsWith(valgtMaaned))
+    .filter(p => !soeg || p.tekst.toLowerCase().includes(soeg) || p.kategori.toLowerCase().includes(soeg))
     .sort((a, b) => b.dato.localeCompare(a.dato));
   let ind = 0, ud = 0;
   viste.forEach(p => {
