@@ -1,7 +1,7 @@
 /* Service worker: gør appen tilgængelig offline.
    Bump CACHE-navnet når filerne ændres, så telefonen henter nyt. */
 
-const CACHE = "davids-budget-v8";
+const CACHE = "davids-budget-v9";
 
 const FILER = [
   "./",

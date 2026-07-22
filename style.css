@@ -91,6 +91,9 @@ main { max-width: 1000px; margin: 1.5rem auto; padding: 0 1rem; }
 .maaned-vaelger input[type=search] { flex: 1; min-width: 140px; margin-top: 0; }
 
 /* Grafer */
+.cirkel-valg { display: flex; gap: .4rem; margin: .3rem 0 .5rem; }
+.cirkel-valg .chip { opacity: .55; }
+.cirkel-valg .chip.aktiv { opacity: 1; background: #eef7f0; font-weight: 600; }
 .graf svg { width: 100%; height: auto; display: block; }
 .graf-signatur { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .5rem; font-size: .82rem; color: #52514e; }
 .graf-signatur.lodret { flex-direction: column; gap: .25rem; }

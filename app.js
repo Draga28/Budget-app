@@ -178,7 +178,9 @@ function renderSoejler() {
   div.innerHTML = s;
 }
 
-/* Cirkeldiagram (doughnut): udgifter pr. kategori, sidste 3 måneder */
+/* Cirkeldiagram (doughnut): udgifter eller indtægter pr. kategori, sidste 3 måneder */
+let cirkelType = "udgift";
+
 function renderCirkel() {
   const nu = new Date();
   const graense = new Date(nu.getFullYear(), nu.getMonth() - 2, 1);
@@ -186,14 +188,16 @@ function renderCirkel() {
   let total = 0;
   state.posteringer.forEach(p => {
     const d = new Date(p.dato);
-    if (p.type === "udgift" && d >= graense) {
+    if (p.type === (cirkelType === "udgift" ? "udgift" : "indtaegt") && d >= graense) {
       sum[p.kategori] = (sum[p.kategori] || 0) + p.beloeb;
       total += p.beloeb;
     }
   });
+  document.getElementById("graf-cirkel-titel").textContent =
+    (cirkelType === "udgift" ? "Udgifter" : "Indtægter") + " pr. kategori (sidste 3 mdr.)";
   const div = document.getElementById("graf-cirkel");
   if (total === 0) {
-    div.innerHTML = "<p class='hint'>Ingen udgifter registreret endnu – importér fra banken eller tast ind, så tegnes grafen her.</p>";
+    div.innerHTML = `<p class='hint'>Ingen ${cirkelType === "udgift" ? "udgifter" : "indtægter"} registreret endnu – importér fra banken eller tast ind, så tegnes grafen her.</p>`;
     return;
   }
   // Top 5 kategorier + resten samlet som "Andet"
@@ -229,6 +233,19 @@ function renderCirkel() {
   s += `</div>`;
   div.innerHTML = s;
 }
+
+document.getElementById("cirkel-ud").addEventListener("click", () => {
+  cirkelType = "udgift";
+  document.getElementById("cirkel-ud").classList.add("aktiv");
+  document.getElementById("cirkel-ind").classList.remove("aktiv");
+  renderCirkel();
+});
+document.getElementById("cirkel-ind").addEventListener("click", () => {
+  cirkelType = "indtaegt";
+  document.getElementById("cirkel-ind").classList.add("aktiv");
+  document.getElementById("cirkel-ud").classList.remove("aktiv");
+  renderCirkel();
+});
 
 /* Søjler pr. kategori for denne måneds udgifter */
 function renderKategorier() {
